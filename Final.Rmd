@@ -1,0 +1,184 @@
+---
+title: "Inequality in Education Analysis"
+author: "Group Project"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(plotly)
+library(ggplot2)
+library(DT)
+#library(sf)
+```
+
+```{r}
+setwd('C:/Binus/Semester 4/Data Mining/AoL/AoL')
+data <- read.csv('Inequality in Education_2.csv')
+datatable(head(data))
+
+```
+```{r}
+str(data)
+summary(data)
+```
+```{r}
+missing_values <- sapply(data, function(x) sum(is.na(x)))
+datatable(data.frame(Variable = names(missing_values), MissingValues = missing_values))
+
+```
+```{r}
+#deleting column inequality.in.Education..2010. - 2012
+data<- subset(data, select = -c(Inequality.in.Education..2010., Inequality.in.Education..2011., Inequality.in.Education..2012.))
+data<- data[!apply(data[, 7:15], 1, function(x) all(is.na(x))), ]
+print(data)
+```
+
+```{r}
+#using next year value
+for (i in 1:179){
+  for(j in 7:15){
+    if(!is.na(data[i,j])){
+      tmp <- as.numeric(data[i,j])
+      break
+      }
+    }
+  for(k in 7:15){
+    if(is.na(data[i,k])){
+      data[i,k] <- tmp
+    }
+  }
+}
+#data<- lapply(data, function(x){
+#  ifelse(is.na(x), median(x, na.rm = TRUE),x)
+#})
+#data<- as.data.frame(data)
+
+colSums(is.na(data))
+```
+
+```{r}
+cols_to_normalize <- c('Inequality.in.Education..2013.', 
+                       'Inequality.in.Education..2014.', 'Inequality.in.Education..2015.', 
+                       'Inequality.in.Education..2016.', 'Inequality.in.Education..2017.', 
+                       'Inequality.in.Education..2018.', 'Inequality.in.Education..2019.', 
+                       'Inequality.in.Education..2020.', 'Inequality.in.Education..2021.')
+
+min_max_scaling <- function(x) {
+  return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+}
+
+data[cols_to_normalize] <- lapply(data[cols_to_normalize],min_max_scaling)
+```
+
+```{r}
+summary_statistics <- summary(data)
+datatable(as.data.frame(summary_statistics))
+
+```
+
+
+```{r}
+# Histogram of Educational Inequality (2010)
+plot_ly(data, x = ~Inequality.in.Education..2013., type = 'histogram')
+
+# Bar Chart of Human Development Groups
+plot_ly(data, x = ~Human.Development.Groups, type = 'bar')
+
+# Pie Chart of Continents
+plot_ly(data, labels = ~Continent, type = 'pie')
+
+# Box Plot of HDI Rank (2021)
+plot_ly(data, y = ~HDI.Rank..2021., type = 'box')
+
+```
+```{r}
+correlation_matrix <- cor(data %>% select_if(is.numeric), use = "complete.obs")
+heatmap(correlation_matrix, main = "Correlation Matrix", col = colorRampPalette(c("blue", "white", "red"))(20))
+
+```
+
+```{r}
+# Scatter Plot of HDI Rank vs. Educational Inequality (2021)
+plot_ly(data, x = ~HDI.Rank..2021., y = ~Inequality.in.Education..2021., type = 'scatter', mode = 'markers')
+
+```
+
+```{r}
+# Bar Chart of Educational Inequality by Human Development Groups (2021)
+plot_ly(data, x = ~Human.Development.Groups, y = ~Inequality.in.Education..2021., type = 'bar')
+
+```
+```{r}
+data_average <- data %>%
+  group_by(Continent) %>%
+  summarise(
+    average_2013 = mean(Inequality.in.Education..2013.),
+    average_2014 = mean(Inequality.in.Education..2014.),
+    average_2015 = mean(Inequality.in.Education..2015.),
+    average_2016 = mean(Inequality.in.Education..2016.),
+    average_2017 = mean(Inequality.in.Education..2017.),
+    average_2018 = mean(Inequality.in.Education..2018.),
+    average_2019 = mean(Inequality.in.Education..2019.),
+    average_2020 = mean(Inequality.in.Education..2020.),
+    average_2021 = mean(Inequality.in.Education..2021.)
+  )
+```
+
+```{r}
+data_long1 <- gather(data_average, key = "Year", value = "Inequality", `average_2013`:`average_2021`)
+```
+
+```{r}
+# Heatmap of Educational Inequality over Years by Continents
+# Reshape data for heatmap
+data_long <- gather(data, key = "Year", value = "Inequality", `Inequality.in.Education..2013.`:`Inequality.in.Education..2021.`)
+plot_ly(data_long1, x = ~Year, y = ~Continent, z = ~Inequality, type = 'heatmap')
+
+```
+```{r}
+# Bubble Chart showing HDI Rank, Educational Inequality (2021), and Human Development Groups
+plot_ly(data, x = ~`HDI.Rank..2021.`, y = ~`Inequality.in.Education..2021.`, text = ~Country, type = 'scatter', mode = 'markers', size = ~`Inequality.in.Education..2021.`, color = ~`Human.Development.Groups`)
+
+```
+```{r}
+colSums(is.na(data))
+```
+
+```{r}
+# Load required libraries for spatial data
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(plotly)
+
+# Load world shapefile
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Join data with shapefile
+world_data <- merge(world, data, by.x = "iso_a3", by.y = "ISO3")
+
+# Create interactive choropleth map
+map <- plot_ly(data = world_data, 
+               type = 'choropleth', 
+               locations = ~iso_a3, 
+               z = ~Inequality.in.Education..2021., 
+               text = ~paste("Country:", name, "<br>",
+                             "Educational Inequality (2021):", Inequality.in.Education..2021.),
+               colorscale = "Viridis",
+               marker = list(line = list(width = 0.5, color = 'rgb(40,40,40)')),
+               colorbar = list(title = "Educational Inequality<br>(2021)"))
+
+map <- map %>%
+  layout(title = 'Educational Inequality by Country (2021)',
+         geo = list(showframe = FALSE,
+                    showcoastlines = FALSE,
+                    projection = list(type = 'equirectangular')))
+
+map
+
+```
+
