@@ -103,6 +103,3 @@ This project aims to answer the following questions:
 
 ---
 
-## Author
-
-Group project contribution focusing on data preprocessing, exploratory analysis, and visualization.
